@@ -183,9 +183,9 @@ const AddonsManager = () => {
                   icon="upload"
                   style={{ width: '100%' }}
                 />
-                <Link to="/market" style={{ width: '100%' }}>
-                  <Button label="Addon Market" icon="store" style={{ width: '100%' }} />
-                </Link>
+                {/* <Link to="/market" style={{ width: '100%' }}>*/}
+                {/*   <Button label="Addon Market" icon="store" style={{ width: '100%' }} />*/}
+                {/* </Link>*/}
               </div>
             }
             extraContext={viewInMarket}

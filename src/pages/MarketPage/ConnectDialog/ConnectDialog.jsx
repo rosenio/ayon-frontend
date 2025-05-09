@@ -18,7 +18,7 @@ const ConnectDialog = ({ redirect, visible, onHide, ...props }) => {
         <Styled.List>
           <Styled.ListItem>
             <Icon icon="check_circle" />
-            <span className={Type.titleMedium}>Addon Market Access</span>
+            {/*<span className={Type.titleMedium}>Addon Market Access</span>*/}
           </Styled.ListItem>
           <Styled.ListItem>
             <Icon icon="check_circle" />
