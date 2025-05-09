@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import ReactDOM from 'react-dom'
 import ServerConfigUpload from './ServerConfigUpload'
 import SettingsEditor from '@containers/SettingsEditor'
@@ -9,7 +9,7 @@ import {
   useGetServerConfigSchemaQuery,
 } from '@queries/config/getConfig'
 import { useSetServerConfigMutation } from '@queries/config/updateConfig'
-import { ServerConfigModel } from '@api/rest/config'
+import { ServerConfigModel } from '@shared/api'
 import styled from 'styled-components'
 import { toast } from 'react-toastify'
 import usePortalElements from '@hooks/usePortalElements'
@@ -58,10 +58,19 @@ const ServerConfig = () => {
 
   useEffect(() => {
     if (!isLoadingData && !isLoadingSchema && !isLoadingOverrides) {
-      setFormData(originalData)
+      //      setFormData(originalData)
       setChangedKeys([])
       setBackgroundFileName(originalData?.customization?.login_background || '')
       setLogoFileName(originalData?.customization?.studio_logo || '')
+
+      setFormData({
+        ...originalData,
+        customization: {
+          login_background: originalData?.customization?.login_background || '',
+          studio_logo: originalData?.customization?.studio_logo || '',
+          motd: originalData?.customization?.motd || '',
+        },
+      })
     }
   }, [
     isLoadingData,
@@ -92,6 +101,52 @@ const ServerConfig = () => {
       toast.error('Failed to save server config')
     }
   }
+  const handleClearUpload = async (field: 'login_background' | 'studio_logo') => {
+    try {
+      // clear the filename in the formData and update the server config
+      // local fileName state will be updated by the useEffect above
+      await setServerConfig({
+        serverConfigModel: {
+          ...formData,
+          customization: {
+            ...formData.customization,
+            [field]: '',
+          },
+        },
+      }).unwrap()
+    } catch (error) {
+      toast.error('Failed to clear upload')
+    }
+  }
+
+  const settingsEditor = useMemo(() => {
+    if (isLoadingData || isLoadingSchema || isLoadingOverrides) {
+      return null
+    }
+    return (
+      // @ts-ignore
+      <SettingsEditor
+        schema={configSchema}
+        originalData={originalData}
+        formData={formData}
+        changedKeys={changedKeys}
+        overrides={configOverrides}
+        onChange={setFormData}
+        onSetChangedKeys={setChangedKeys}
+      />
+    )
+  }, [
+    isLoadingData,
+    isLoadingSchema,
+    isLoadingOverrides,
+    configSchema,
+    originalData,
+    formData,
+    changedKeys,
+    configOverrides,
+    setFormData,
+    setChangedKeys,
+  ])
 
   return (
     <>
@@ -107,16 +162,7 @@ const ServerConfig = () => {
         </Toolbar>
 
         <StyledScrollPanel className="transparent" ref={containerRef}>
-          {/* @ts-ignore */}
-          <SettingsEditor
-            schema={configSchema}
-            originalData={originalData}
-            formData={formData}
-            changedKeys={changedKeys}
-            overrides={configOverrides}
-            onChange={setFormData}
-            onSetChangedKeys={setChangedKeys}
-          />
+          {settingsEditor}
         </StyledScrollPanel>
       </StyledSection>
       {bgElement &&
@@ -125,6 +171,7 @@ const ServerConfig = () => {
             fileType="login_background"
             fileName={backgroundFileName}
             setFileName={setBackgroundFileName}
+            onClear={() => handleClearUpload('login_background')}
           />,
           bgElement,
         )}
@@ -134,6 +181,7 @@ const ServerConfig = () => {
             fileType="studio_logo"
             fileName={logoFileName}
             setFileName={setLogoFileName}
+            onClear={() => handleClearUpload('studio_logo')}
           />,
           logoElement,
         )}

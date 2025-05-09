@@ -1,14 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import styled from 'styled-components'
 
 import VideoOverlay from './VideoOverlay'
 import Trackbar from './Trackbar'
 import VideoPlayerControls from './VideoPlayerControls'
-import EmptyPlaceholder from '@components/EmptyPlaceholder/EmptyPlaceholder'
+import EmptyPlaceholder from '@shared/components/EmptyPlaceholder'
 import clsx from 'clsx'
 import useGoToFrame from './hooks/useGoToFrame'
-import { useViewer } from '@context/viewerContext'
-import ViewerHistory from '@containers/Viewer/ViewerHistory'
+import { useViewer } from '@context/ViewerContext'
 
 const VideoPlayerContainer = styled.div`
   position: absolute;
@@ -64,23 +63,23 @@ const AnnotationsContainer = styled.div`
 const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewableId }) => {
   const {
     createToolbar,
-    AnnotationsProvider,
+    AnnotationsEditorProvider,
     AnnotationsCanvas,
     isLoaded: isLoadedAnnotations,
-    state: { annotations, frames, addAnnotation },
-    useDrawHistory,
+    useAnnotations,
   } = useViewer()
 
   const videoRef = useRef(null)
   const videoRowRef = useRef(null)
 
-  const initialPosition = useRef(0)
+  const initialPosition = useRef(0) // in seconds
   const seekedToInitialPosition = useRef(false)
 
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0) // in seconds
+  const [duration, setDuration] = useState(0) // in seconds
+  const [bufferedRanges, setBufferedRanges] = useState([]) // here we use frames
+
   const [isPlaying, setIsPlaying] = useState(false)
-  const [bufferedRanges, setBufferedRanges] = useState([])
   const [loadError, setLoadError] = useState(null)
   const [actualSource, setActualSource] = useState(src)
   const [showStill, setShowStill] = useState(false)
@@ -98,6 +97,13 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
   const [actualVideoDimensions, setActualVideoDimensions] = useState(null)
 
   useGoToFrame({ setCurrentTime, frameRate, duration, videoElement: videoRef.current })
+
+  const { annotations } = useAnnotations()
+
+  const annotatedFrames = useMemo(() => {
+    const annotatedFrames = Object.values(annotations).flatMap(({ range }) => range)
+    return Array.from(new Set(annotatedFrames))
+  }, [annotations])
 
   //
   // Video size handling
@@ -154,7 +160,6 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
     }
 
     const handleCanPlay = () => {
-      console.debug('VideoPlayer: Can play now.')
       seekPreferredInitialPosition()
       setShowStill(false)
     }
@@ -168,26 +173,20 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
       videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata)
       videoElement.removeEventListener('canplay', handleCanPlay)
     }
-  }, [videoRef.current]) // Add videoRef.current as a dependency
+  }, [videoRef.current])
 
   useEffect(() => {
+    // Obscure the video element with a still image,
+    // so the transition to the new video is not visible
     console.debug('VideoPlayer: source changed to', src)
     if (!videoRef.current) return
-    // obscure the video element with a still image,
-    // so the transition to the new video is not visible
     setShowStill(true)
     // Give the overlay some time to show up
     setTimeout(() => setActualSource(src), 20)
   }, [src, videoRef])
 
-  const handleOnPlay = () => {
-    onPlay && onPlay()
-    setIsPlaying(true)
-  }
-
   const handleLoad = () => {
     console.debug('VideoPlayer: handleLoad')
-
     if (autoplay) {
       setMuted(true)
       // mute the video
@@ -205,13 +204,27 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
     seekedToInitialPosition.current = false
   }
 
+  const handleLoadError = (e) => {
+    // check if the video is 404
+    const code = e.target.error.code
+    if (code === 4) {
+      setLoadError({ code, message: 'No review for this version' })
+    } else {
+      setLoadError({ code, message: 'Error loading video' })
+    }
+    setShowStill(false)
+  }
+
   const handleProgress = (e) => {
     // create a list of buffered time ranges
     const buffered = e.target.buffered
     if (!buffered.length) return
     const bufferedRanges = []
+    // buffered returns time ranges in seconds,
+    // but we are passing it to the trackbar component,
+    // that uses frames internally, so we convert it here
     for (var i = 0; i < buffered.length; i++) {
-      const r = { start: buffered.start(i), end: buffered.end(i) }
+      const r = { start: buffered.start(i) * frameRate, end: buffered.end(i) * frameRate }
       bufferedRanges.push(r)
     }
     setBufferedRanges(bufferedRanges)
@@ -221,33 +234,45 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
   // Video position / currentTime handling
   //
 
+  const handleOnPlay = () => {
+    onPlay && onPlay()
+    setIsPlaying(true)
+  }
+
+  // Track the current frame
+
+  const updateCurrentTime = (now, metadataInfo) => {
+    setCurrentTime(metadataInfo.mediaTime)
+    const video = videoRef.current
+    if (!video) return
+    video.requestVideoFrameCallback(updateCurrentTime)
+  }
+
   useEffect(() => {
-    // CurrentTime updater
-    // HTML video onTimeUpdate doesn't update fast enough to be super sleek
-    // But we can query the currentTime much faster and have smooth timeline
     if (!videoRef.current) return
-    const frameLength = frameRate ? 1 / frameRate : 0.04
-    const updateTime = () => {
-      const actualDuration = videoRef.current?.duration
-      if (actualDuration !== duration) {
-        setDuration(actualDuration)
-      }
-      const actualTime = Math.min(videoRef.current?.currentTime || 0, actualDuration - frameLength)
-      if (isPlaying) {
-        setCurrentTime(actualTime)
-        setTimeout(() => requestAnimationFrame(updateTime), 10)
-      } else {
-        setCurrentTime(actualTime)
-      }
+    const video = videoRef.current
+    video.requestVideoFrameCallback(updateCurrentTime)
+  }, [videoRef.current])
+
+  // I guess using useMemo here would cause much higher overhead :)
+
+  const currentFrame = Math.round(currentTime * frameRate)
+  const frameCount = Math.round(duration * frameRate)
+
+  // Get the video duration
+
+  useEffect(() => {
+    if (!videoRef.current) return
+    const actualDuration = videoRef.current?.duration
+    if (actualDuration !== duration) {
+      setDuration(actualDuration)
     }
-    updateTime()
   }, [videoRef, isPlaying, duration])
 
   const seekPreferredInitialPosition = () => {
     // This is called when verison is changed
     // It maintains the position of the video after switching
     // so the user can compare two frames
-
     if (seekedToInitialPosition.current) return
     const newTime = initialPosition.current
 
@@ -274,28 +299,36 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
   }
 
   const seekToTime = (newTime) => {
+    // seek to time specified in seconds.
+    // this is not used directly (as we use seekToFrame)
     const videoElement = videoRef.current
+    if (newTime === videoRef.current?.currentTime) return
     if (videoElement.readyState >= 3) {
       // HAVE_FUTURE_DATA
       videoElement.currentTime = newTime
-      setCurrentTime(newTime)
     } else {
-      console.debug('VideoPlayer: Waiting for canplay event.')
       const onCanPlay = () => {
         videoElement.currentTime = newTime
-        setCurrentTime(newTime)
         videoElement.removeEventListener('canplay', onCanPlay)
       }
       videoElement.addEventListener('canplay', onCanPlay)
     }
-  }
-
-  const handleScrub = (newTime) => {
-    if (newTime === videoRef.current?.currentTime) return
-    videoRef.current?.pause()
-    seekToTime(newTime)
     initialPosition.current = newTime
   }
+
+  const seekToFrame = (newFrame) => {
+    const newTime = newFrame / frameRate
+    seekToTime(newTime)
+  }
+
+  const handleScrub = (newFrame) => {
+    videoRef.current?.pause()
+    seekToFrame(newFrame)
+  }
+
+  // When user pauses the video
+  // We need to land on the frame that was paused at
+  // (this is a hack to ensure reported position is accurate)
 
   const handlePause = () => {
     initialPosition.current = videoRef.current?.currentTime
@@ -309,14 +342,16 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
     }, 10)
   }
 
+  // User reached the end of the video
+  // if loop mode is enabled, start over
+
   const handleEnded = () => {
     if (!isPlaying) {
-      console.debug('ended, but not playing')
-      console.debug('position: ', videoRef.current.currentTime)
+      if (loop) videoRef.current.currentTime = 0
       return
     }
     if (loop) {
-      console.debug('VideoPlayer: Ended, looping', videoRef.current.currentTime)
+      console.debug('VideoPlayer: Ended, looping')
       videoRef.current.currentTime = 0
       videoRef.current.play()
     } else {
@@ -325,15 +360,14 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
     }
   }
 
-  const handleLoadError = (e) => {
-    // check if the video is 404
-    const code = e.target.error.code
-    if (code === 4) {
-      setLoadError({ code, message: 'No review for this version' })
+  // User clicked play/pause button
+
+  const handlePlayPause = () => {
+    if (videoRef.current.paused) {
+      videoRef.current.play()
     } else {
-      setLoadError({ code, message: 'Error loading video' })
+      videoRef.current.pause()
     }
-    setShowStill(false)
   }
 
   const handleMuteToggle = (value) => {
@@ -341,18 +375,20 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
     videoRef.current.muted = value
   }
 
-  const currentFrame = Math.floor(videoRef.current?.currentTime * frameRate) + 1
+  //
+  // Render
+  //
 
   return (
     <VideoPlayerContainer>
-      <AnnotationsProvider
+      <AnnotationsEditorProvider
         backgroundRef={videoRef}
         containerDimensions={actualVideoDimensions}
         pageNumber={currentFrame}
-        onAnnotationsChange={addAnnotation}
-        annotations={annotations}
         id={reviewableId}
         src={src}
+        mediaType="video"
+        atMediaTime={videoRef.current?.currentTime || 0}
       >
         <div
           className={clsx('video-row video-container', { 'no-content': loadError })}
@@ -389,36 +425,38 @@ const VideoPlayer = ({ src, frameRate, aspectRatio, autoplay, onPlay, reviewable
             />
             {AnnotationsCanvas && isLoadedAnnotations && (
               <AnnotationsContainer style={{ visibility: isPlaying ? 'hidden' : 'visible' }}>
-                {actualVideoDimensions && <AnnotationsCanvas width={actualVideoDimensions.width} height={actualVideoDimensions.height} />}
+                {actualVideoDimensions && (
+                  <AnnotationsCanvas
+                    width={actualVideoDimensions.width}
+                    height={actualVideoDimensions.height}
+                  />
+                )}
               </AnnotationsContainer>
             )}
           </div>
         </div>
         {createToolbar()}
-        {useDrawHistory && <ViewerHistory useHistory={useDrawHistory} />}
-      </AnnotationsProvider>
+      </AnnotationsEditorProvider>
 
       <div className="trackbar-row">
         <Trackbar
-          currentTime={currentTime}
-          duration={duration}
-          bufferedRanges={bufferedRanges}
-          onScrub={handleScrub}
+          currentFrame={currentFrame}
+          frameCount={frameCount}
           frameRate={frameRate}
+          onScrub={handleScrub}
+          bufferedRanges={bufferedRanges}
           isPlaying={isPlaying}
-          highlighted={frames}
+          highlighted={annotatedFrames}
         />
       </div>
 
       <div className="controls-row">
         <VideoPlayerControls
-          videoRef={videoRef}
           isPlaying={isPlaying}
-          onFrameChange={(newFrame) => {
-            setCurrentTime(newFrame)
-            initialPosition.current = newFrame
-          }}
-          frameRate={frameRate}
+          handlePlayPause={handlePlayPause}
+          seekToFrame={seekToFrame}
+          frameCount={frameCount}
+          currentFrame={currentFrame}
           setMuted={handleMuteToggle}
           {...{ showOverlay, setShowOverlay, loop, setLoop, muted }}
         />

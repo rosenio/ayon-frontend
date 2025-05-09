@@ -1,14 +1,14 @@
 // take filters from the search filter and transform them into something graphql can use
 
-import { AttributeFilterInput, ProjectNodeTasksArgs } from '@api/graphql'
+import { AttributeFilterInput, ProjectNodeTasksArgs } from '@shared/api'
 import getFilterFromId from '@components/SearchFilter/getFilterFromId'
-import { Filter } from '@components/SearchFilter/types'
+import { Filter } from '@ynput/ayon-react-components'
 import { TaskFilterValue } from '../hooks/useFilterBySlice'
 import { TaskProgressSliceType } from '@pages/TasksProgressPage/TasksProgressPage'
 
 type SliceField = Exclude<TaskProgressSliceType, 'hierarchy'>
 
-type FilterQueriesData = Pick<
+export type FilterQueriesData = Pick<
   ProjectNodeTasksArgs,
   'assignees' | 'assigneesAny' | 'tags' | 'tagsAny' | 'taskTypes' | 'statuses' | 'attributes'
 >

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import useHierarchyTable from './useHierarchyTable'
 import useUsersTable from './useUsersTable'
 import useProjectAnatomySlices from './useProjectAnatomySlices'
-import { SliceType, useSlicerContext } from '@context/slicerContext'
+import { SliceType, useSlicerContext } from '@context/SlicerContext'
 import { Slice, SliceData, SliceOption, TableData, TableRow } from '../types'
 
 interface Props {
@@ -136,9 +136,7 @@ const useTableDataBySlice = ({ sliceFields }: Props): TableData => {
     if (isLoadingData) return
 
     // check if slice field is enabled
-    if (!sliceFields.includes(sliceType)) {
-      return
-    }
+    if (!sliceFields.includes(sliceType)) return
 
     const fetchData = async () => {
       try {
@@ -161,6 +159,7 @@ const useTableDataBySlice = ({ sliceFields }: Props): TableData => {
         setIsLoading(false)
       }
     }
+
     fetchData()
   }, [sliceType, sliceFields, projectName, isLoadingData])
 

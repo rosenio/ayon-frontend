@@ -1,4 +1,4 @@
-import api from '@api'
+import api from '@shared/api'
 
 const parseProductFps = (product) => {
   const folderFps = product.folder.attrib.fps || ''
@@ -124,7 +124,7 @@ fragment ProductVersionFragment on VersionNode {
 const PRODUCTS_LIST_QUERY = `
 query ProductsList($projectName: String!, $ids: [String!]!) {
     project(name: $projectName){
-        products(folderIds: $ids){
+        products(folderIds: $ids, first: 1000){
             edges {
                 node {
                     id
@@ -176,7 +176,7 @@ query GetProductsVersions($projectName: String!, $ids: [String!]!) {
 ${PRODUCT_VERSION_FRAGMENT}
 `
 
-const getProduct = api.injectEndpoints({
+export const getProductApi = api.injectEndpoints({
   endpoints: (build) => ({
     getProductList: build.query({
       query: ({ projectName, folderIds }) => ({
@@ -221,4 +221,4 @@ export const {
   useGetProductListQuery,
   useLazyGetProductsVersionsQuery,
   useGetProductsVersionsQuery,
-} = getProduct
+} = getProductApi

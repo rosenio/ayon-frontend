@@ -5,17 +5,15 @@ import { TablePanel, Section } from '@ynput/ayon-react-components'
 import { TreeTable } from 'primereact/treetable'
 import { Column } from 'primereact/column'
 
-import EntityDetail from './DetailsDialog'
+import { DetailsDialog } from '@shared/components'
+import { useCreateContextMenu } from '@shared/containers/ContextMenu'
+import { useTableKeyboardNavigation, extractIdFromClassList } from '@shared/containers/Feed'
 import { CellWithIcon } from '@components/icons'
 import { setFocusedTasks, setPairing, setUri, updateBrowserFilters } from '@state/context'
 import { toast } from 'react-toastify'
 import { useGetTasksQuery } from '@queries/getTasks'
-import useCreateContext from '@hooks/useCreateContext'
 import NoEntityFound from '@components/NoEntityFound'
 import { openViewer } from '@/features/viewer'
-import useTableKeyboardNavigation, {
-  extractIdFromClassList,
-} from './Feed/hooks/useTableKeyboardNavigation'
 import clsx from 'clsx'
 import useTableLoadingData from '@hooks/useTableLoadingData'
 
@@ -164,13 +162,14 @@ const TaskList = ({ style = {}, autoSelect = false }) => {
     },
   ]
 
-  const [ctxMenuShow] = useCreateContext()
+  const [ctxMenuShow] = useCreateContextMenu()
 
   const onContextMenu = (event) => {
     let newFocused = [...focusedTasks]
     const itemId = event.node.data.id
     if (itemId && !focusedTasks?.includes(itemId)) {
       // if the selection does not include the clicked node, new selection is the clicked node
+      newFocused = [itemId]
       const subType = event.node.data.taskType
       const name = event.node.data.name
       // update selection state
@@ -269,7 +268,7 @@ const TaskList = ({ style = {}, autoSelect = false }) => {
   return (
     <Section style={style}>
       <TablePanel>
-        <EntityDetail
+        <DetailsDialog
           projectName={projectName}
           entityType="task"
           entityIds={focusedTasks}

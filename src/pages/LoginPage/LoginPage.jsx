@@ -4,12 +4,12 @@ import { useDispatch } from 'react-redux'
 import { toast } from 'react-toastify'
 import { InputText, InputPassword, Button, Panel } from '@ynput/ayon-react-components'
 import { login } from '@state/user'
-import api from '@api'
+import api from '@shared/api'
 import AuthLink from './AuthLink'
-import { useGetInfoQuery } from '@queries/auth/getAuth'
+import { useGetSiteInfoQuery } from '@shared/api'
 import LoadingPage from '../LoadingPage'
 import * as Styled from './LoginPage.styled'
-import useLocalStorage from '@hooks/useLocalStorage'
+import { useLocalStorage } from '@shared/hooks'
 import { isEmpty, isEqual } from 'lodash'
 import remarkGfm from 'remark-gfm'
 
@@ -35,7 +35,7 @@ const LoginPage = ({ isFirstTime = false }) => {
 
   const [isLoading, setIsLoading] = useState(false)
 
-  const { data: info = {}, isLoading: isLoadingInfo } = useGetInfoQuery()
+  const { data: info = {}, isLoading: isLoadingInfo } = useGetSiteInfoQuery({ full: true })
   const { motd, loginPageBrand = '', loginPageBackground = '' } = info
 
   // we need to store the redirect in local storage to persist it across auth flows
@@ -170,7 +170,7 @@ const LoginPage = ({ isFirstTime = false }) => {
     <main className="center">
       {loginPageBackground && <Styled.BG src={loginPageBackground} />}
       <Styled.LoginForm>
-        {motd && (
+        {(motd || loginPageBrand) && (
           <Panel>
             {loginPageBrand && <Styled.Logo src={loginPageBrand} />}
             <Styled.MessageMarkdown remarkPlugins={remarkGfm}>{motd}</Styled.MessageMarkdown>

@@ -1,12 +1,12 @@
 import React, { useContext, useEffect, useMemo } from 'react'
-import { useListAddonsQuery } from '@queries/addons/getAddons'
+import { useListAddonsQuery } from '@shared/api'
 import { DataTable } from 'primereact/datatable'
 import { Column } from 'primereact/column'
-import { SocketContext } from '@context/websocketContext'
-import { rcompare, coerce } from 'semver'
+import { SocketContext } from '@context/WebsocketContext'
+import { compareBuild, coerce } from 'semver'
 import { InputSwitch, InputText, VersionSelect } from '@ynput/ayon-react-components'
 import { FilePath, LatestIcon } from './Bundles.styled'
-import useCreateContext from '@hooks/useCreateContext'
+import { useCreateContextMenu } from '@shared/containers/ContextMenu'
 import { useNavigate } from 'react-router'
 import styled from 'styled-components'
 
@@ -46,10 +46,10 @@ const AddonListItem = ({ version, setVersion, selection, addons = [], versions }
             const foundAddon = addons.find((a) => a.name === s.name)
             if (!foundAddon) return ['NONE']
             const versionList = Object.keys(foundAddon.versions || {})
-            versionList.sort((a, b) => rcompare(a, b))
+            versionList.sort((a, b) => -1 * compareBuild(a, b))
             return [...versionList, 'NONE']
           })
-        : [[...versions.sort((a, b) => rcompare(a, b)), 'NONE']],
+        : [[...versions.sort((a, b) => -1 * compareBuild(a, b)), 'NONE']],
 
     [selection, addons],
   )
@@ -153,7 +153,7 @@ const BundlesAddonList = React.forwardRef(
       return items
     }
 
-    const [ctxMenuShow] = useCreateContext([])
+    const [ctxMenuShow] = useCreateContextMenu([])
 
     const handleContextClick = (e) => {
       let contextSelection = []
@@ -208,7 +208,7 @@ const BundlesAddonList = React.forwardRef(
             const currentVersion = addon.version
             const allVersions = addon.versions
             const sortedVersions = Object.keys(allVersions).sort((a, b) => {
-              const comparison = rcompare(coerce(a), coerce(b))
+              const comparison = -1 * compareBuild(coerce(a), coerce(b))
               if (comparison === 0) {
                 return b.localeCompare(a)
               }

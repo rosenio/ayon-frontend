@@ -6,8 +6,8 @@ import getSubscribeLink from './helpers/getSubscribeLink'
 import { useGetYnputCloudInfoQuery } from '@queries/cloud/cloud'
 import { useAppSelector } from '@state/store'
 import { Button, Icon } from '@ynput/ayon-react-components'
-import { useGetActiveUsersCountQuery } from '@queries/user/getUsers'
-import useLocalStorage from '@hooks/useLocalStorage'
+import { useGetActiveUsersCountQuery } from '@shared/api'
+import { useLocalStorage } from '@shared/hooks'
 import { createPortal } from 'react-dom'
 import { useCustomerly } from 'react-live-chat-customerly'
 
@@ -19,7 +19,7 @@ const TrialBanner: FC<TrialBannerProps> = ({}) => {
 
   const [snooze, setSnooze] = useLocalStorage<number | null>('trialBannerSnooze', null)
 
-  const { data: connect } = useGetYnputCloudInfoQuery()
+  const { data: connect } = useGetYnputCloudInfoQuery(undefined, { skip: !user.name })
   const { isTrialing, left } = getTrialDates(connect?.subscriptions)
   const { formatted, oneDay, oneHour } = left || {}
 
@@ -31,7 +31,10 @@ const TrialBanner: FC<TrialBannerProps> = ({}) => {
   const isSnoozing = getIsSnoozing()
 
   // get the number of users currently active
-  const { data: activeUsersCount = 10 } = useGetActiveUsersCountQuery({})
+  const { data: activeUsersCount = 10 } = useGetActiveUsersCountQuery(
+    {},
+    { skip: !isTrialing || !canManage },
+  )
 
   const { show, hide } = useCustomerly()
 
